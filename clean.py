@@ -23,6 +23,9 @@ maxDays = int(os.environ["MAX_DAYS"])
 # You can send a list of string separate by comma, Ex. "Pending, Running, Succeeded, Failed, Unknown"
 podStatus = os.environ["POD_STATUS"].replace(' ','').split(",")
 
+# deployment list to delete
+deployList = set()
+
 # --- Functions ---------------------------------------------------------------
 def callAPI(method, url):
     headers = {"Authorization": "Bearer "+token}
@@ -31,12 +34,22 @@ def callAPI(method, url):
     return request.json()
 
 def getPods(namespace):
-    url = apiURL+"v1/namespaces/"+namespace+"/pods"
+    url = apiURL+"api/v1/namespaces/"+namespace+"/pods"
     response = callAPI('GET', url)
     return response["items"]
 
 def deletePod(podName, namespace):
-    url = apiURL+"v1/namespaces/"+namespace+"/pods/"+podName
+    url = apiURL+"api/v1/namespaces/"+namespace+"/pods/"+podName
+    response = callAPI('DELETE', url)
+    return response
+
+def getDeploys(namespace):
+    url = apiURL+"apis/apps/v1/namespaces/"+namespace+"/deployments"
+    response = callAPI('GET', url)
+    return response["items"]
+
+def deleteDeploy(deployName, namespace):
+    url = apiURL+"apis/apps/v1/namespaces/"+namespace+"/deployments/"+deployName
     response = callAPI('DELETE', url)
     return response
 
@@ -51,5 +64,12 @@ for pod in pods:
         podStartTime = datetime.strptime(pod["status"]["startTime"], "%Y-%m-%dT%H:%M:%SZ")
         todayDate = datetime.today()
         if ((podStartTime + timedelta(days=maxDays)) < todayDate):
-            print("Deleting pod ("+pod["metadata"]["name"]+"). Status ("+pod["status"]["phase"]+"). Start time ("+str(podStartTime)+")")
-            deletePod(pod["metadata"]["name"], namespace)
+            if pod['metadata']['name'].startswith('web-'):
+                deployList.add(pod['metadata']['labels']['app'])
+
+if deployList:
+    for deploy in deployList:
+        print("Deleting deploy: [%s]" % deploy)
+        deleteDeploy(deploy, namespace)
+else:
+    print("No deployments for delete.")
